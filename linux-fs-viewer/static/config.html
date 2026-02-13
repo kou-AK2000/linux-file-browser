@@ -1,0 +1,49 @@
+<h2>Directory Display Settings</h2>
+
+<label><input type="checkbox" id="bin" /> /bin</label><br />
+<label><input type="checkbox" id="sbin" /> /sbin</label><br />
+<label><input type="checkbox" id="usr" /> /usr</label><br />
+<label><input type="checkbox" id="etc" /> /etc</label><br />
+<label><input type="checkbox" id="var_log" /> /var/log</label><br />
+
+<button onclick="save()">Save</button>
+<button onclick="goBack()">Back</button>
+
+<script>
+    let currentConfig;
+
+    async function load() {
+        const res = await fetch("/api/config");
+        currentConfig = await res.json();
+
+        document.getElementById("bin").checked = currentConfig.allow.bin;
+        document.getElementById("sbin").checked = currentConfig.allow.sbin;
+        document.getElementById("usr").checked = currentConfig.allow.usr;
+        document.getElementById("etc").checked = currentConfig.allow.etc;
+        document.getElementById("var_log").checked =
+            currentConfig.allow.var_log;
+    }
+
+    async function save() {
+        currentConfig.allow.bin = document.getElementById("bin").checked;
+        currentConfig.allow.sbin = document.getElementById("sbin").checked;
+        currentConfig.allow.usr = document.getElementById("usr").checked;
+        currentConfig.allow.etc = document.getElementById("etc").checked;
+        currentConfig.allow.var_log =
+            document.getElementById("var_log").checked;
+
+        await fetch("/api/config/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(currentConfig),
+        });
+
+        alert("Saved");
+    }
+
+    function goBack() {
+        window.location.href = "/";
+    }
+
+    load();
+</script>

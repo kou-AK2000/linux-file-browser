@@ -1,0 +1,273 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Linux File Browser</title>
+        <link rel="stylesheet" href="/css/style.css" />
+    </head>
+    <body>
+        <h2>Linux File Browser</h2>
+
+        <!-- 設定画面ボタン -->
+        <button onclick="location.href = '/config.html'">⚙ Settings</button>
+
+        <br /><br />
+
+        <!-- =============================
+     システム情報表示エリア
+     ============================= -->
+        <div
+            id="systemInfo"
+            style="padding: 10px; border: 1px solid #ccc; margin-bottom: 15px"
+        >
+            Loading system info...
+        </div>
+
+        <div id="path"></div>
+        <button onclick="goUp()">⬆ Up</button>
+
+        <br /><br />
+
+        <label>Size Unit:</label>
+        <select id="unit" onchange="reload()">
+            <option value="bit">bit</option>
+            <option value="kb">KB</option>
+            <option value="mb">MB</option>
+            <option value="gb">GB</option>
+        </select>
+
+        <label>Type:</label>
+        <select id="typeFilter" onchange="reload()">
+            <option value="all">All</option>
+            <option value="dir">Dir</option>
+            <option value="file">File</option>
+        </select>
+
+        <label>Search:</label>
+        <input
+            type="text"
+            id="searchBox"
+            oninput="reload()"
+            placeholder="file name..."
+        />
+
+        <label>Sort:</label>
+        <select id="sortBy" onchange="reload()">
+            <option value="name">Name</option>
+            <option value="size">Size</option>
+            <option value="date">Date</option>
+        </select>
+
+        <select id="sortOrder" onchange="reload()">
+            <option value="asc">Asc</option>
+            <option value="desc">Desc</option>
+        </select>
+
+        <br /><br />
+
+        <table border="1" cellpadding="5">
+            <thead>
+                <tr>
+                    <th>Mode</th>
+                    <th>Perm</th>
+                    <th>Links</th>
+                    <th>Owner</th>
+                    <th>Group</th>
+                    <th>Size</th>
+                    <th>Modified</th>
+                    <th>Name</th>
+                </tr>
+            </thead>
+            <tbody id="list"></tbody>
+        </table>
+
+        <script>
+            let currentPath = "/";
+            let currentData = [];
+
+            /* =============================
+   システム情報取得
+   ============================= */
+
+            function loadSystemInfo() {
+                fetch("/api/system")
+                    .then((res) => res.json())
+                    .then((data) => {
+                        document.getElementById("systemInfo").innerHTML = `
+                <b>Hostname:</b> ${data.hostname} |
+                <b>Distribution:</b> ${data.distribution} |
+                <b>Kernel:</b> ${data.kernel} |
+                <b>Arch:</b> ${data.arch}
+            `;
+                    })
+                    .catch(() => {
+                        document.getElementById("systemInfo").innerText =
+                            "Failed to load system information";
+                    });
+            }
+
+            /* =============================
+   サイズ変換
+   ============================= */
+
+            function convertSize(bytes) {
+                const unit = document.getElementById("unit").value;
+
+                if (unit === "bit") return bytes * 8 + " bit";
+                if (unit === "kb") return (bytes / 1024).toFixed(2) + " KB";
+                if (unit === "mb")
+                    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+                if (unit === "gb")
+                    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+
+                return bytes + " B";
+            }
+
+            /* =============================
+   パーミッション色分け
+   ============================= */
+
+            function getPermColor(item) {
+                if (item.perm === "777") return "red";
+                if (/[1357]/.test(item.perm)) return "green";
+                if (/[2367]/.test(item.perm)) return "orange";
+                return "black";
+            }
+
+            /* =============================
+   描画処理
+   ============================= */
+
+            function render(data, path) {
+                const tbody = document.getElementById("list");
+                tbody.innerHTML = "";
+
+                const filter = document.getElementById("typeFilter").value;
+                const keyword = document
+                    .getElementById("searchBox")
+                    .value.toLowerCase();
+                const sortBy = document.getElementById("sortBy").value;
+                const sortOrder = document.getElementById("sortOrder").value;
+
+                let filtered = data.filter((item) => {
+                    if (filter === "dir" && !item.is_dir) return false;
+                    if (filter === "file" && item.is_dir) return false;
+
+                    if (keyword && !item.name.toLowerCase().includes(keyword))
+                        return false;
+
+                    return true;
+                });
+
+                filtered.sort((a, b) => {
+                    let valA, valB;
+
+                    if (sortBy === "name") {
+                        valA = a.name.toLowerCase();
+                        valB = b.name.toLowerCase();
+                    }
+                    if (sortBy === "size") {
+                        valA = a.size;
+                        valB = b.size;
+                    }
+                    if (sortBy === "date") {
+                        valA = new Date(a.mod_time);
+                        valB = new Date(b.mod_time);
+                    }
+
+                    if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+                    if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+                    return 0;
+                });
+
+                filtered.forEach((item) => {
+                    const row = document.createElement("tr");
+
+                    row.innerHTML = `
+            <td>${item.mode}</td>
+            <td><span style="color:${getPermColor(item)}">${item.perm}</span></td>
+            <td>${item.nlink}</td>
+            <td>${item.owner}</td>
+            <td>${item.group}</td>
+            <td>${convertSize(item.size)}</td>
+            <td>${item.mod_time}</td>
+        `;
+
+                    const nameCell = document.createElement("td");
+                    const span = document.createElement("span");
+                    span.textContent = item.name;
+
+                    if (item.is_dir) {
+                        span.classList.add("name-cell", "dir-icon");
+                        span.style.cursor = "pointer";
+
+                        span.onclick = () => {
+                            let newPath =
+                                path === "/"
+                                    ? "/" + item.name
+                                    : path + "/" + item.name;
+
+                            load(newPath);
+                        };
+                    } else {
+                        span.classList.add("file-icon");
+                    }
+
+                    nameCell.appendChild(span);
+                    row.appendChild(nameCell);
+                    tbody.appendChild(row);
+                });
+            }
+
+            /* =============================
+   API呼び出し
+   ============================= */
+
+            function load(path) {
+                fetch("/api/list?path=" + encodeURIComponent(path))
+                    .then((res) => {
+                        if (!res.ok)
+                            throw new Error("API Error: " + res.status);
+                        return res.json();
+                    })
+                    .then((data) => {
+                        currentPath = path;
+                        currentData = data;
+                        document.getElementById("path").innerText =
+                            "Current: " + path;
+                        render(data, path);
+                    })
+                    .catch((err) => alert(err));
+            }
+
+            /* =============================
+   再描画
+   ============================= */
+
+            function reload() {
+                render(currentData, currentPath);
+            }
+
+            /* =============================
+   上の階層へ
+   ============================= */
+
+            function goUp() {
+                if (currentPath === "/") return;
+
+                let parts = currentPath.split("/");
+                parts.pop();
+
+                let newPath = parts.join("/");
+                if (newPath === "") newPath = "/";
+
+                load(newPath);
+            }
+
+            /* 初期ロード */
+
+            loadSystemInfo();
+            load("/");
+        </script>
+    </body>
+</html>
