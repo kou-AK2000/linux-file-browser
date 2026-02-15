@@ -1,3 +1,6 @@
+/* ===============================
+   全体
+================================ */
 body {
     font-family: monospace;
     background-color: #1e1e1e;
@@ -10,8 +13,10 @@ h2 {
     color: #ffffff;
 }
 
-/* OS情報パネル */
-#osinfo {
+/* ===============================
+   OS情報パネル
+================================ */
+#systemInfo {
     background: #2b2b2b;
     padding: 12px;
     border-radius: 8px;
@@ -20,12 +25,17 @@ h2 {
     font-size: 14px;
 }
 
-/* パス表示 */
+/* ===============================
+   パス表示
+================================ */
 #path {
     font-weight: bold;
     margin-bottom: 10px;
 }
 
+/* ===============================
+   ボタン
+================================ */
 button {
     padding: 6px 10px;
     border: none;
@@ -40,6 +50,9 @@ button:hover {
     background: #505050;
 }
 
+/* ===============================
+   入力UI
+================================ */
 select,
 input {
     background: #2b2b2b;
@@ -50,24 +63,37 @@ input {
     margin-right: 8px;
 }
 
+/* ===============================
+   テーブル
+================================ */
 table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 15px;
     background: #2b2b2b;
-    border-radius: 8px;
-    overflow: hidden;
+    color: #e0e0e0; /* ← 明示的に通常色固定 */
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
 }
 
 th {
     background: #3a3a3a;
-    padding: 8px;
+    padding: 6px 8px;
     text-align: left;
+    border-bottom: 1px solid #444;
+    border-right: 1px solid #444;
+    color: #e0e0e0; /* ← 念のため固定 */
 }
 
 td {
     padding: 6px 8px;
+    border-bottom: 1px solid #444;
+    border-right: 1px solid #444;
+    color: #e0e0e0; /* ← ここ重要（黄色化防止） */
+}
+
+th:last-child,
+td:last-child {
+    border-right: none;
 }
 
 tr:nth-child(even) {
@@ -78,20 +104,59 @@ tr:hover {
     background-color: #333333;
 }
 
+/* ===============================
+   ファイル名スタイル
+================================ */
 .name-cell {
-    color: #8ab4f8; /* 青だけど落ち着いた色 */
-    text-decoration: underline; /* 下線を文字だけに */
+    color: #8ab4f8;
+    text-decoration: underline;
 }
 
 .name-cell:hover {
-    text-decoration: none; /* ホバー時は下線消すなど自由に */
+    text-decoration: none;
 }
 
-/* アイコンは文字列の前に表示 */
+/* ===============================
+   アイコン
+================================ */
 .dir-icon::before {
     content: "📁 ";
 }
 
 .file-icon::before {
     content: "📄 ";
+}
+
+/* ===============================
+   モーダル
+================================ */
+.modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.95);
+    color: #eee;
+    padding: 20px;
+    overflow: auto;
+    z-index: 9999;
+}
+
+.modal-header {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+}
+
+#closeModal {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 28px;
+    cursor: pointer;
+}
+
+pre {
+    margin-top: 60px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
 }

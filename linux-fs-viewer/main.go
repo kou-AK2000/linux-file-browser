@@ -133,30 +133,19 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	}
 
-	realPath := resolvePath(path)
+	cleanPath := filepath.Clean(path)
 
-	/* ===============================
-	   遷移許可チェック
-	   =============================== */
-
-	if !isAllowedPath(realPath) {
-		http.NotFound(w, r)
-		return
-	}
-
-	/* ===============================
-	   シンボリックリンク解決
-	   =============================== */
-
-	resolved, err := filepath.EvalSymlinks(realPath)
+	resolved, err := filepath.EvalSymlinks(cleanPath)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 
-	/* ===============================
-	   ディレクトリ読み取り
-	   =============================== */
+	// ★ resolvedでチェックする
+	if !isAllowedPath(resolved) {
+		http.NotFound(w, r)
+		return
+	}
 
 	entries, err := os.ReadDir(resolved)
 	if err != nil {
@@ -209,6 +198,72 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+/* =========================================================
+	ファイル閲覧API
+   ========================================================= */
+
+func fileViewHandler(w http.ResponseWriter, r *http.Request) {
+
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	cleanPath := filepath.Clean(path)
+
+	resolved, err := filepath.EvalSymlinks(cleanPath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// ★ resolvedでチェック
+	if !isAllowedPath(resolved) {
+		http.NotFound(w, r)
+		return
+	}
+
+	info, err := os.Stat(resolved)
+	if err != nil || info.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
+
+	// 2MB制限
+	if info.Size() > 2*1024*1024 {
+		http.Error(w, "File too large", http.StatusBadRequest)
+		return
+	}
+
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	if !isTextFile(data) {
+		http.Error(w, "Binary file not supported", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write(data)
+}
+
+/* =========================================================
+	テキスト判定関数
+   ========================================================= */
+
+func isTextFile(data []byte) bool {
+	for _, b := range data {
+		if b == 0 {
+			return false
+		}
+	}
+	return true
 }
 
 /* =========================================================
@@ -328,6 +383,7 @@ func main() {
 	}
 
 	http.HandleFunc("/api/list", handler)
+	http.HandleFunc("/api/file", fileViewHandler)
 	http.HandleFunc("/api/system", systemHandler)
 	http.HandleFunc("/api/config", configGetHandler)
 	http.HandleFunc("/api/config/update", configUpdateHandler)

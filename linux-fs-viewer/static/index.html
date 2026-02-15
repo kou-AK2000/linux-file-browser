@@ -5,23 +5,15 @@
         <title>Linux File Browser</title>
         <link rel="stylesheet" href="/css/style.css" />
     </head>
+
     <body>
         <h2>Linux File Browser</h2>
 
-        <!-- 設定画面ボタン -->
         <button onclick="location.href = '/config.html'">⚙ Settings</button>
 
         <br /><br />
 
-        <!-- =============================
-     システム情報表示エリア
-     ============================= -->
-        <div
-            id="systemInfo"
-            style="padding: 10px; border: 1px solid #ccc; margin-bottom: 15px"
-        >
-            Loading system info...
-        </div>
+        <div id="systemInfo">Loading system info...</div>
 
         <div id="path"></div>
         <button onclick="goUp()">⬆ Up</button>
@@ -65,7 +57,7 @@
 
         <br /><br />
 
-        <table border="1" cellpadding="5">
+        <table>
             <thead>
                 <tr>
                     <th>Mode</th>
@@ -81,24 +73,49 @@
             <tbody id="list"></tbody>
         </table>
 
+        <!-- ===== モーダル ===== -->
+
+        <div id="fileModal" class="modal">
+            <div class="modal-header">
+                <button id="closeModal">✕</button>
+            </div>
+            <pre id="fileContent"></pre>
+        </div>
+
         <script>
             let currentPath = "/";
             let currentData = [];
 
-            /* =============================
-   システム情報取得
-   ============================= */
+            function openFile(path) {
+                fetch("/api/file?path=" + encodeURIComponent(path))
+                    .then((res) => {
+                        if (!res.ok) throw new Error("Cannot open file");
+                        return res.text();
+                    })
+                    .then((text) => {
+                        document.getElementById("fileContent").textContent =
+                            text;
+                        document.getElementById("fileModal").style.display =
+                            "block";
+                    })
+                    .catch((err) => alert(err.message));
+            }
+
+            function closeModal() {
+                document.getElementById("fileModal").style.display = "none";
+                document.getElementById("fileContent").textContent = "";
+            }
 
             function loadSystemInfo() {
                 fetch("/api/system")
                     .then((res) => res.json())
                     .then((data) => {
                         document.getElementById("systemInfo").innerHTML = `
-                <b>Hostname:</b> ${data.hostname} |
-                <b>Distribution:</b> ${data.distribution} |
-                <b>Kernel:</b> ${data.kernel} |
-                <b>Arch:</b> ${data.arch}
-            `;
+                        <b>Hostname:</b> ${data.hostname} |
+                        <b>Distribution:</b> ${data.distribution} |
+                        <b>Kernel:</b> ${data.kernel} |
+                        <b>Arch:</b> ${data.arch}
+                    `;
                     })
                     .catch(() => {
                         document.getElementById("systemInfo").innerText =
@@ -106,10 +123,12 @@
                     });
             }
 
-            /* =============================
-   サイズ変換
-   ============================= */
-
+            /**
+             * バイト数を選択された単位に変換する
+             *
+             * @param {number} bytes - ファイルサイズ（バイト）
+             * @returns {string} 変換後のサイズ文字列
+             */
             function convertSize(bytes) {
                 const unit = document.getElementById("unit").value;
 
@@ -122,21 +141,33 @@
 
                 return bytes + " B";
             }
-
-            /* =============================
-   パーミッション色分け
-   ============================= */
-
+            /**
+             * パーミッション文字列から表示色を決定する関数
+             *
+             * 例:
+             *  777 → 危険（赤）
+             *  書き込み権限あり → オレンジ
+             *  実行権限あり → 緑
+             *  それ以外 → 黄色
+             *
+             * @param {Object} item - APIから取得したファイル情報オブジェクト
+             * @returns {string} CSSカラーコード
+             */
             function getPermColor(item) {
-                if (item.perm === "777") return "red";
-                if (/[1357]/.test(item.perm)) return "green";
-                if (/[2367]/.test(item.perm)) return "orange";
-                return "black";
-            }
+                if (!item.perm) return "#ffffff";
 
-            /* =============================
-   描画処理
-   ============================= */
+                // 777 は危険（赤）
+                if (item.perm === "777") return "#ff4d4d";
+
+                // 書き込み権限あり（オレンジ）
+                if (/[2367]/.test(item.perm)) return "#ffa500";
+
+                // 実行権限あり（緑）
+                if (/[1357]/.test(item.perm)) return "#00cc66";
+
+                // それ以外
+                return "#f5c542";
+            }
 
             function render(data, path) {
                 const tbody = document.getElementById("list");
@@ -152,10 +183,8 @@
                 let filtered = data.filter((item) => {
                     if (filter === "dir" && !item.is_dir) return false;
                     if (filter === "file" && item.is_dir) return false;
-
                     if (keyword && !item.name.toLowerCase().includes(keyword))
                         return false;
-
                     return true;
                 });
 
@@ -165,12 +194,10 @@
                     if (sortBy === "name") {
                         valA = a.name.toLowerCase();
                         valB = b.name.toLowerCase();
-                    }
-                    if (sortBy === "size") {
+                    } else if (sortBy === "size") {
                         valA = a.size;
                         valB = b.size;
-                    }
-                    if (sortBy === "date") {
+                    } else {
                         valA = new Date(a.mod_time);
                         valB = new Date(b.mod_time);
                     }
@@ -184,33 +211,42 @@
                     const row = document.createElement("tr");
 
                     row.innerHTML = `
-            <td>${item.mode}</td>
-            <td><span style="color:${getPermColor(item)}">${item.perm}</span></td>
-            <td>${item.nlink}</td>
-            <td>${item.owner}</td>
-            <td>${item.group}</td>
-            <td>${convertSize(item.size)}</td>
-            <td>${item.mod_time}</td>
-        `;
+                    <td>${item.mode}</td>
+                    <td>
+                        <span style="color:${getPermColor(item)}; font-weight:bold">
+                            ${item.perm}
+                        </span>
+                    </td>
+                    <td>${item.nlink}</td>
+                    <td>${item.owner}</td>
+                    <td>${item.group}</td>
+                    <td>${convertSize(item.size)}</td>
+                    <td>${item.mod_time}</td>
+                `;
 
                     const nameCell = document.createElement("td");
                     const span = document.createElement("span");
                     span.textContent = item.name;
+                    span.style.cursor = "pointer";
 
                     if (item.is_dir) {
                         span.classList.add("name-cell", "dir-icon");
-                        span.style.cursor = "pointer";
-
                         span.onclick = () => {
-                            let newPath =
+                            const newPath =
                                 path === "/"
                                     ? "/" + item.name
                                     : path + "/" + item.name;
-
                             load(newPath);
                         };
                     } else {
-                        span.classList.add("file-icon");
+                        span.classList.add("name-cell", "file-icon");
+                        span.onclick = () => {
+                            const filePath =
+                                path === "/"
+                                    ? "/" + item.name
+                                    : path + "/" + item.name;
+                            openFile(filePath);
+                        };
                     }
 
                     nameCell.appendChild(span);
@@ -218,10 +254,6 @@
                     tbody.appendChild(row);
                 });
             }
-
-            /* =============================
-   API呼び出し
-   ============================= */
 
             function load(path) {
                 fetch("/api/list?path=" + encodeURIComponent(path))
@@ -237,37 +269,40 @@
                             "Current: " + path;
                         render(data, path);
                     })
-                    .catch((err) => alert(err));
+                    .catch((err) => alert(err.message));
             }
-
-            /* =============================
-   再描画
-   ============================= */
 
             function reload() {
                 render(currentData, currentPath);
             }
-
-            /* =============================
-   上の階層へ
-   ============================= */
 
             function goUp() {
                 if (currentPath === "/") return;
 
                 let parts = currentPath.split("/");
                 parts.pop();
-
                 let newPath = parts.join("/");
                 if (newPath === "") newPath = "/";
 
                 load(newPath);
             }
 
-            /* 初期ロード */
+            window.addEventListener("DOMContentLoaded", function () {
+                document.getElementById("closeModal").onclick = closeModal;
 
-            loadSystemInfo();
-            load("/");
+                document
+                    .getElementById("fileModal")
+                    .addEventListener("click", function (e) {
+                        if (e.target.id === "fileModal") closeModal();
+                    });
+
+                document.addEventListener("keydown", function (e) {
+                    if (e.key === "Escape") closeModal();
+                });
+
+                loadSystemInfo();
+                load("/");
+            });
         </script>
     </body>
 </html>
